@@ -226,7 +226,7 @@ export const createBusinessSchema = z
 // Dates are naive local strings (§5); validating via a Date round-trip is the
 // one sanctioned escape from "no Date objects" for rejecting impossible
 // calendar days like 2026-02-30 without pulling in date-fns (D8).
-function toLocalYYYYMMDD(date: Date): string {
+export function toLocalYYYYMMDD(date: Date): string {
   const year = String(date.getFullYear()).padStart(4, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
