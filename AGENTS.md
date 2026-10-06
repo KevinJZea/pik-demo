@@ -156,7 +156,7 @@ pnpm exec tsc --noEmit      # typecheck only
 | `formatPrice(cents)` | `35000` → `"$350.00"` |
 | `formatDuration(min)` | `45` → `"45 min"`; `90` → `"1 h 30 min"` |
 | `formatTime(minutesFromMidnight)` / `formatTimeString("HH:mm")` | `570` → `"9:30 a.m."` |
-| `formatDate(dateStr)` | `"2026-10-06"` → `"lun, 6 de oct"` (es-MX, short) |
+| `formatDate(dateStr)` | `"2026-10-06"` → `"mar, 6 de oct"` (es-MX, short) |
 | `WEEKDAY_NAMES` / hours summary helpers | es-MX long day names; render weekly hours as a list ("Lunes: 10:00 a.m. – 7:00 p.m." / "Cerrado") |
 
 ---
@@ -222,7 +222,12 @@ The first agent to start creates this file **verbatim** (comment lines included 
 are the invariants; do not "improve" it):
 
 ```ts
-export const BUSINESS_CATEGORIES = ['salon', 'barbershop', 'spa', 'nail-studio'] as const;
+export const BUSINESS_CATEGORIES = [
+  'salon',
+  'barbershop',
+  'spa',
+  'nail-studio',
+] as const;
 export type BusinessCategory = (typeof BUSINESS_CATEGORIES)[number];
 
 /** Matches Date#getDay(): 0 = Sunday … 6 = Saturday. */
