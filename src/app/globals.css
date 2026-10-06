@@ -1,5 +1,19 @@
 @import 'tailwindcss';
 
-body {
-  font-family: Helvetica, Arial, sans-serif;
+@theme {
+  --color-cream: #faf5ef; /* page background */
+  --color-sand: #f2eae0; /* subtle surfaces, input backgrounds */
+  --color-card: #ffffff; /* cards */
+  --color-line: #e7ddd2; /* borders */
+  --color-espresso: #2b2320; /* primary text */
+  --color-taupe: #6e6057; /* secondary text */
+  --color-plum: #6c3b54; /* primary accent: buttons, active steps */
+  --color-plum-deep: #53293f; /* hover / pressed */
+  --color-terracotta: #bc6b3c; /* accent: category highlights */
+  --color-sage: #7e9b7a; /* success / available */
+  --color-danger: #b34135; /* errors */
+
+  --font-sans:
+    var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), Georgia, 'Times New Roman', serif;
 }
