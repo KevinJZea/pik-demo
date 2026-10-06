@@ -1,6 +1,7 @@
 import type { Appointment, Weekday } from '@/types/domain';
 
 import { minutesFromTimeString, toLocalYYYYMMDD } from '@/lib/schemas';
+import { makeReference } from '@/lib/slug';
 
 import { seedBusinesses } from './businesses';
 
@@ -55,21 +56,6 @@ const DESIGN_BY_BUSINESS_ID: Record<string, SlotDesign[]> = {
     { serviceId: 'svc-luna-unas-acrilicas', staffId: 'staff-luna-renata', startRelMin: 330 },
   ],
 };
-
-// §10 alphabet: no ambiguous chars (no 0/O, 1/I/L). Mirrors the format the
-// store's generator must produce; seeds only need batch-unique codes.
-const REFERENCE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-
-function makeSeedReference(used: Set<string>): string {
-  let reference = '';
-  do {
-    const bytes = crypto.getRandomValues(new Uint8Array(6));
-    const chars = Array.from(bytes, (byte) => REFERENCE_ALPHABET[byte % REFERENCE_ALPHABET.length]);
-    reference = `PIK-${chars.join('')}`;
-  } while (used.has(reference));
-  used.add(reference);
-  return reference;
-}
 
 // Index-aligned fake Spanish customers for the seeds.
 const SEED_CUSTOMERS = [
@@ -164,7 +150,7 @@ export function seedAppointments(now: Date = new Date()): Appointment[] {
       const customer = SEED_CUSTOMERS[appointments.length % SEED_CUSTOMERS.length];
       appointments.push({
         id: crypto.randomUUID(),
-        reference: makeSeedReference(usedReferences),
+        reference: makeReference(usedReferences),
         businessId: business.id,
         serviceId: service.id,
         staffId: staff.id,
