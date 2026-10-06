@@ -44,7 +44,8 @@ implemented. Both agents start from this state.
 - Mobile-first, fully responsive.
 - **Product copy (every user-visible string) is Spanish.** Code, identifiers, and docs
   are English. Prices are **MXN**, stored as integer **cents**.
-- No new dependencies beyond `zod` and `server-only` without owner approval.
+- No new dependencies beyond the approved set — `zod` and `server-only` (runtime),
+  `@stylistic/eslint-plugin` (dev, lint-only) — without owner approval.
 - Do not commit unless the owner explicitly asks.
 
 ---
@@ -103,6 +104,7 @@ come back later. **Never create another agent's files** (exception: `domain.ts` 
 | Styling | Tailwind CSS 4 via `@theme` tokens in `globals.css` |
 | Validation | `zod@4.6.5` — one schema file shared by client forms and Route Handlers |
 | Server-only guard | `import 'server-only'` in `store.ts` / `api-utils.ts` |
+| Lint style | `@stylistic/eslint-plugin` (dev-only): semicolons mandatory in `.ts`/`.tsx` |
 | Language / package manager | TypeScript strict, `@/*` → `./src/*`, pnpm 11 |
 
 ```bash
@@ -126,8 +128,19 @@ pnpm exec tsc --noEmit      # typecheck only
   for slot math (`startMin: 570`). Display is 12h es-MX ("9:30 a.m.").
 - **Prices:** integer `priceCents` (e.g. `35000` = $350.00 MXN), formatted via
   `Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' })`.
-- **Comments:** none, except brief invariant notes (`/** … */` one-liners) in the two
-  contract files (`domain.ts`, `schemas.ts`).
+- **Comments:** mandatory wherever code is at least a little complex — algorithms,
+  tricky conditionals, subtle domain rules, workarounds, special-case handling.
+  Briefly explain **what the code does** and, when there is one, **the special case
+  it covers**. Prefer 1–2 lines; up to 4–5 lines when the explanation is genuinely
+  worth it. Trivial, self-explanatory code stays uncommented — never restate
+  syntax. English only. Calibration points in this codebase: slot-overlap math,
+  "Primero disponible" resolution, the `globalThis` store cache, the
+  service-delete cascade. The invariant notes in the contract files (`domain.ts`,
+  `schemas.ts`) are this convention applied to types. Not lint-enforceable —
+  upheld in review.
+- **Semicolons:** mandatory in every `.ts`/`.tsx` file — statements, type-member
+  delimiters, and type-alias closings. Enforced by ESLint
+  (`@stylistic/semi` + `@stylistic/member-delimiter-style`) via `eslint.config.mjs`.
 - **Spanish copy is inline** in components — no i18n framework in this MVP.
 - **Next.js policy:** if you are not 100% sure about a Next.js 16.3 API, STOP and ask
   the owner for the docs/skills instead of guessing. The owner explicitly wants this.
@@ -209,73 +222,73 @@ The first agent to start creates this file **verbatim** (comment lines included 
 are the invariants; do not "improve" it):
 
 ```ts
-export const BUSINESS_CATEGORIES = ['salon', 'barbershop', 'spa', 'nail-studio'] as const
-export type BusinessCategory = (typeof BUSINESS_CATEGORIES)[number]
+export const BUSINESS_CATEGORIES = ['salon', 'barbershop', 'spa', 'nail-studio'] as const;
+export type BusinessCategory = (typeof BUSINESS_CATEGORIES)[number];
 
 /** Matches Date#getDay(): 0 = Sunday … 6 = Saturday. */
-export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6
+export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 /** "HH:mm" 24h strings, e.g. "09:30". null = closed that day. */
-export type DayHours = { open: string; close: string } | null
+export type DayHours = { open: string; close: string } | null;
 
 /** All 7 days required. */
-export type WeeklyHours = Record<Weekday, DayHours>
+export type WeeklyHours = Record<Weekday, DayHours>;
 
 /** durationMin: multiple of 15, 15–240. priceCents: MXN minor units, 1–1_000_000. */
 export type Service = {
-  id: string
-  name: string
-  durationMin: number
-  priceCents: number
-}
+  id: string;
+  name: string;
+  durationMin: number;
+  priceCents: number;
+};
 
 /** serviceIds: non-empty subset of the business's service ids. */
 export type Staff = {
-  id: string
-  name: string
-  role: string
-  serviceIds: string[]
-}
+  id: string;
+  name: string;
+  role: string;
+  serviceIds: string[];
+};
 
 export type Business = {
-  id: string
-  slug: string
-  name: string
-  category: BusinessCategory
-  phone: string
-  address: string
-  city: string
-  hours: WeeklyHours
-  services: Service[]
-  staff: Staff[]
+  id: string;
+  slug: string;
+  name: string;
+  category: BusinessCategory;
+  phone: string;
+  address: string;
+  city: string;
+  hours: WeeklyHours;
+  services: Service[];
+  staff: Staff[];
   /** ISO 8601. */
-  createdAt: string
-}
+  createdAt: string;
+};
 
 /** date: "YYYY-MM-DD" naive local. startMin: minutes from midnight, multiple of 15.
  *  staffId: always a resolved id, never "any". */
 export type Appointment = {
-  id: string
+  id: string;
   /** "PIK-XXXXXX". */
-  reference: string
-  businessId: string
-  serviceId: string
-  staffId: string
-  date: string
-  startMin: number
-  durationMin: number
-  customerName: string
-  customerPhone: string
+  reference: string;
+  businessId: string;
+  serviceId: string;
+  staffId: string;
+  date: string;
+  startMin: number;
+  durationMin: number;
+  customerName: string;
+  customerPhone: string;
   /** ISO 8601. */
-  createdAt: string
-}
+  createdAt: string;
+};
 
 /** staffId: first eligible free staff when available; null when unavailable. */
 export type TimeSlot = {
-  startMin: number
-  available: boolean
-  staffId: string | null
-}
+  startMin: number;
+  available: boolean;
+  staffId: string | null;
+};
 ```
 
 ---

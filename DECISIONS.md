@@ -10,23 +10,25 @@ entry below.
 
 | # | Decision | # | Decision |
 |---|---|---|---|
-| D1 | Spanish copy, English code | D18 | Slot rules (15-min grid, no buffers, no lead time) |
-| D2 | MXN, integer cents | D19 | 14-day booking window |
-| D3 | Route Handlers + in-memory store | D20 | "Primero disponible" staff option |
-| D4 | RSC read the store directly; clients fetch the API | D21 | 409 conflict + recovery flow |
-| D5 | Mutations via Route Handlers, not Server Actions | D22 | Reference codes `PIK-XXXXXX` |
-| D6 | Simulated latency (300–600 ms) | D23 | Seeds relative to today |
-| D7 | `?fail=1` deterministic error flag | D24 | Service deletion cascade (wizard state) |
-| D8 | zod as the only runtime dependency | D25 | Warm & elegant design system |
-| D9 | `server-only` guard on the store | D26 | Fraunces + Instrument Sans via `next/font` |
-| D10 | Minimal API surface (4 endpoints) | D27 | Hand-rolled primitives, no component library |
-| D11 | Registration: URL per step + sessionStorage | D28 | CSS/SVG covers, no external images |
-| D12 | Require ≥1 staff member | D29 | Inline Spanish strings, no i18n framework |
-| D13 | Booking: profile (RSC) + one wizard route | D30 | Light theme only |
-| D14 | Booking selections in URL search params | D31 | Naive local dates, no timezone math |
-| D15 | Light fake payment | D32 | One service per appointment |
-| D16 | Home = business directory | D33 | No tests; lint + typecheck + build |
-| D17 | Home/profile/success are RSC; wizards are client | D34 | Ephemeral booking success screen |
+| D1 | Spanish copy, English code | D19 | 14-day booking window |
+| D2 | MXN, integer cents | D20 | "Primero disponible" staff option |
+| D3 | Route Handlers + in-memory store | D21 | 409 conflict + recovery flow |
+| D4 | RSC read the store directly; clients fetch the API | D22 | Reference codes `PIK-XXXXXX` |
+| D5 | Mutations via Route Handlers, not Server Actions | D23 | Seeds relative to today |
+| D6 | Simulated latency (300–600 ms) | D24 | Service deletion cascade (wizard state) |
+| D7 | `?fail=1` deterministic error flag | D25 | Warm & elegant design system |
+| D8 | zod as the only runtime dependency | D26 | Fraunces + Instrument Sans via `next/font` |
+| D9 | `server-only` guard on the store | D27 | Hand-rolled primitives, no component library |
+| D10 | Minimal API surface (4 endpoints) | D28 | CSS/SVG covers, no external images |
+| D11 | Registration: URL per step + sessionStorage | D29 | Inline Spanish strings, no i18n framework |
+| D12 | Require ≥1 staff member | D30 | Light theme only |
+| D13 | Booking: profile (RSC) + one wizard route | D31 | Accessibility as a baseline |
+| D14 | Booking selections in URL search params | D32 | Naive local dates, no timezone math |
+| D15 | Light fake payment | D33 | One service per appointment |
+| D16 | Home = business directory | D34 | No tests; lint + typecheck + build |
+| D17 | Home/profile/success are RSC; wizards are client | D35 | Ephemeral booking success screen |
+| D18 | Slot rules (15-min grid, no buffers, no lead time) | D36 | Semicolons mandatory, `@stylistic`-enforced |
+| D37 | Comments mandatory on non-trivial code | — | — |
 
 ---
 
@@ -342,6 +344,35 @@ the confirm step.
 client state anyway; documented as a known limitation instead of half-solved.
 **Rejected:** a `?booked=1` URL flag (fake refresh-safety), writing bookings to
 `localStorage` and hydrating a success route (extra machinery, still not shareable).
+
+### D36 — Semicolons mandatory in all `.ts`/`.tsx` (owner-directed, mid-build)
+**Chosen:** every statement, type-member delimiter, and type-alias closing uses `;`,
+enforced by ESLint via `@stylistic/semi` + `@stylistic/member-delimiter-style`
+(`@stylistic/eslint-plugin`, owner-approved dev-only dependency; see
+`eslint.config.mjs`). Scope is `.ts`/`.tsx` only — `.mjs`/`.css` untouched.
+**Why:** two agents writing in parallel need one mechanical style gate instead of a
+convention; core ESLint `semi` cannot see TS type members (verified empirically
+before choosing), and typescript-eslint v8 removed its stylistic rules —
+`@stylistic` is their official successor.
+**Rejected:** statements-only core rule (the type-heavy contract files would pass
+lint half-styled), a custom inline ESLint rule (zero-dep but AST logic living in
+the lint config), convention-only (unenforceable across two parallel agents).
+
+### D37 — Comments mandatory on non-trivial code (owner-directed, mid-build)
+**Chosen:** any code that is at least a little complex — algorithms, tricky
+conditionals, subtle domain rules, workarounds, special-case handling — carries a
+brief comment explaining **what it does** and, when relevant, **the special case
+it covers**. 1–2 lines preferred, up to 4–5 when the explanation warrants it;
+trivial, self-explanatory code stays uncommented; comments are English and
+explain intent, not syntax.
+**Why:** the codebase is read by people who didn't write it (owner, reviewers,
+future maintainers), and the domain has genuinely subtle spots — slot-overlap
+math, "Primero disponible" resolution, the `globalThis` store cache, the wizard's
+service-delete cascade — whose reasoning deserves to live next to the code.
+**Rejected:** the original no-comments convention (terse, but hides intent in
+exactly the places where intent matters most), commenting everything (noise that
+rots fast), lint enforcement (no reliable rule can judge "complex enough") —
+review-enforced convention instead.
 
 ---
 
