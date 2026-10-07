@@ -1,5 +1,8 @@
+export { BookingLoading } from './booking-loading';
 export { BookingRecap } from './booking-recap';
 export type { BookingRecapProps } from './booking-recap';
+export { BookingWizard } from './booking-wizard';
+export type { BookingWizardProps } from './booking-wizard';
 export { BookingSummary } from './booking-summary';
 export type { BookingSummaryProps } from './booking-summary';
 export { BookingSuccess } from './booking-success';
