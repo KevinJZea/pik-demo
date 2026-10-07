@@ -60,28 +60,23 @@ export const serviceNameSchema = z
   .min(2, MSG_SERVICE_NAME)
   .max(60, MSG_SERVICE_NAME);
 
-const phoneBase = z
-  .string()
-  .trim()
-  .regex(/^[+\d][+\d\s-]*$/);
-
-export const businessPhoneSchema = phoneBase
-  .pipe(
-    z.string({ message: MSG_PHONE_BUSINESS }).refine((value) => {
+// One Spanish message per context (§9) on every failure tier — non-string,
+// illegal characters, wrong digit count — so no zod default English can ever
+// surface for a phone field. Business and customer phones share the rules;
+// only the copy differs.
+function phoneSchema(message: string) {
+  return z
+    .string({ message })
+    .trim()
+    .regex(/^[+\d][+\d\s-]*$/, message)
+    .refine((value) => {
       const digits = value.replace(/\D/g, '');
       return digits.length >= 7 && digits.length <= 15;
-    }, MSG_PHONE_CUSTOMER),
-  )
-  .or(z.never({ message: MSG_PHONE_BUSINESS }));
+    }, message);
+}
 
-export const customerPhoneSchema = phoneBase
-  .pipe(
-    z.string({ message: MSG_PHONE_CUSTOMER }).refine((value) => {
-      const digits = value.replace(/\D/g, '');
-      return digits.length >= 7 && digits.length <= 15;
-    }, MSG_PHONE_CUSTOMER),
-  )
-  .or(z.never({ message: MSG_PHONE_CUSTOMER }));
+export const businessPhoneSchema = phoneSchema(MSG_PHONE_BUSINESS);
+export const customerPhoneSchema = phoneSchema(MSG_PHONE_CUSTOMER);
 
 export const addressSchema = z
   .string({ message: MSG_ADDRESS })
@@ -289,8 +284,20 @@ export type AvailabilityQuery = z.infer<typeof availabilityQuerySchema>;
 export type ApiIssue = { path: string; message: string };
 
 export function zodIssues(error: z.ZodError): ApiIssue[] {
-  return error.issues.map((issue) => ({
-    path: issue.path.join('.'),
-    message: issue.message,
-  }));
+  // One field can trip two rules carrying the same copy (e.g. a phone string
+  // fails both the character and the digit-count rule) — dedupe identical
+  // path+message pairs so UI banners never repeat a line.
+  const seen = new Set<string>();
+  const issues: ApiIssue[] = [];
+  for (const issue of error.issues) {
+    const item: ApiIssue = {
+      path: issue.path.join('.'),
+      message: issue.message,
+    };
+    const key = `${item.path}\n${item.message}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    issues.push(item);
+  }
+  return issues;
 }

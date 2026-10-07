@@ -28,7 +28,9 @@ entry below.
 | D16 | Home = business directory | D34 | No tests; lint + typecheck + build |
 | D17 | Home/profile/success are RSC; wizards are client | D35 | Ephemeral booking success screen |
 | D18 | Slot rules (15-min grid, no buffers, no lead time) | D36 | Semicolons mandatory, `@stylistic`-enforced |
-| D37 | Comments mandatory on non-trivial code | — | — |
+| D37 | Comments mandatory on non-trivial code | D38 | Centralized error mapping (`mapStoreError`) |
+| D39 | Store domain 400s reuse the generic copy | D40 | Stable readable seed ids |
+| D41 | `negocio` fallback slug | D42 | Availability: two sequential store calls |
 
 ---
 
@@ -361,8 +363,8 @@ the lint config), convention-only (unenforceable across two parallel agents).
 ### D37 — Comments mandatory on non-trivial code (owner-directed, mid-build)
 **Chosen:** any code that is at least a little complex — algorithms, tricky
 conditionals, subtle domain rules, workarounds, special-case handling — carries a
-brief comment explaining **what it does** and, when relevant, **the special case
-it covers**. 1–2 lines preferred, up to 4–5 when the explanation warrants it;
+brief comment explaining **what it does** and, when relevant, the special case it
+covers. 1–2 lines preferred, up to 4–5 when the explanation warrants it;
 trivial, self-explanatory code stays uncommented; comments are English and
 explain intent, not syntax.
 **Why:** the codebase is read by people who didn't write it (owner, reviewers,
@@ -373,6 +375,56 @@ service-delete cascade — whose reasoning deserves to live next to the code.
 exactly the places where intent matters most), commenting everything (noise that
 rots fast), lint enforcement (no reliable rule can judge "complex enough") —
 review-enforced convention instead.
+
+### D38 — Centralized error mapping and fail-flag handling (implementation-time)
+**Chosen:** `mapStoreError(error)` and `failIfRequested(request)` live in
+`api-utils.ts`; every handler is the same three-step shape — `failIfRequested` →
+zod parse → store call — with one shared error→response mapping.
+**Why:** four handlers × a hand-rolled mapping each is drift waiting to happen;
+one function makes the 409/404/400/generic-500 envelope provably identical
+everywhere, and unknown throwables get logged once in one place.
+**Rejected:** per-route try/catch switches (four copies to keep in sync),
+throwing `Response` objects from the store (couples domain logic to HTTP).
+
+### D39 — Store domain-check failures at confirm time reuse the generic 400 copy (implementation-time)
+**Chosen:** closed day / past slot / slot-past-close at `POST /api/appointments`
+time throw `BadRequestError` carrying the generic
+"Revisa los datos e inténtalo de nuevo." message.
+**Why:** §9 defines no bespoke copy for these cases and inventing new messages
+post-hoc would drift the message table; the zod layer already stops every
+client-reachable path, so these are defense-in-depth re-checks.
+**Rejected:** new per-case Spanish messages (table drift for unreachable-in-UI
+cases), letting them 500 (wrong status for a client mistake).
+
+### D40 — Stable readable seed ids + shared reference sampler (implementation-time)
+**Chosen:** seed businesses/services/staff use prefixed readable ids
+(`biz-…`, `svc-…`, `staff-…`); runtime-created entities keep
+`crypto.randomUUID()`. Seed appointments mint references through the same
+`makeReference(used)` the store uses (it lives in `slug.ts`).
+**Why:** §14 curl commands and seed cross-references become deterministic and
+human-readable in demos; a shared sampler means seeded and generated `PIK-XXXXXX`
+codes can never collide by construction.
+**Rejected:** UUIDs for seeds (unreadable, smoke tests break on every regen),
+a second reference sampler inside the mocks (collision risk by construction).
+
+### D41 — `negocio` fallback slug (implementation-time)
+**Chosen:** when `slugify` yields `''` (a punctuation-only name), the base falls
+back to `negocio` before collision suffixing.
+**Why:** an empty slug is unreachable by URL and unlistable, while the name is
+still valid per §9 — the business must get a reachable public profile.
+**Rejected:** rejecting such names (no §9 rule against them), storing `''`
+(orphaned business), rejecting at zod level (schema drift for one edge).
+
+### D42 — Availability endpoint: two sequential store calls, up to ~1.2 s (implementation-time)
+**Chosen:** the availability handler awaits `getBusinessBySlug` +
+`listAppointments` (2 × 300–600 ms) and passes both results to pure
+`generateSlots`.
+**Why:** honoring "latency lives only in the store" beats special-casing one
+endpoint; the wizard already designs for per-date skeletons (§13), so the extra
+~600 ms is covered UX.
+**Rejected:** skipping latency in `listAppointments` (breaks the
+one-latency-source rule), a combined store method (API surface grows for a
+single caller).
 
 ---
 

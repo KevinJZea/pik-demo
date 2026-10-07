@@ -196,11 +196,11 @@ src/
     register/                   # F: ServicesEditor, StaffEditor, HoursEditor, StepShell…
     booking/                    # F: ServicePicker, StaffPicker, DateStrip, SlotGrid, BookingSummary…
   lib/
-    api-utils.ts                # B: simulateLatency, shouldFail, jsonError helpers
+    api-utils.ts                # B: error classes, simulateLatency, shouldFail/failIfRequested, jsonError/jsonIssueResponse, mapStoreError
     schemas.ts                  # B: zod schemas (shared) — Spanish messages (§9)
     store.ts                    # B: in-memory store (server-only) + seeds loading
-    availability.ts             # B: pure slot-generation logic
-    slug.ts                     # B: slugify + collision suffix
+    availability.ts             # B: pure slot generation (generateSlots, isOverlapping)
+    slug.ts                     # B: slugify + collision suffix + reference sampler (makeReference)
     api.ts                      # F: typed client fetch helpers
     format.ts                   # F: display helpers (above)
     categories.ts               # F: category labels / gradients / glyphs
@@ -208,7 +208,7 @@ src/
     domain.ts                   # Shared contract (§7)
   mocks/
     businesses.ts               # B: 4 seed businesses (§12)
-    appointments.ts            # B: seeded appointments relative to today (§12)
+    appointments.ts            # B: seedAppointments(now) — relative-date seeds (§12)
 ```
 
 `B:` = Backend-owned, `F:` = Frontend-owned. The client never imports `src/mocks/*`;
@@ -308,10 +308,17 @@ export type TimeSlot = {
 - **`?fail=1`** on *any* request: await ~500 ms, then respond
   `500 { "error": "Error simulado para demos (?fail=1)." }`. Check the flag **before**
   touching the store. This flag is the deterministic way to demo error states (README
-  documents it).
+  documents it). Implemented as `failIfRequested(request)` in `api-utils.ts` — every
+  handler does `const failed = await failIfRequested(request); if (failed) return failed;`
+  first thing.
 - Error envelope: `{ "error": string }` (Spanish, user-displayable). Validation errors
   additionally include zod-flattened field issues:
-  `{ "error": "Revisa los datos e inténtalo de nuevo.", "issues": [{ "path": string, "message": string }] }`.
+  `{ "error": "Revisa los datos e inténtalo de nuevo.", "issues": [{ "path": string, "message": string }] }`
+  (identical `path`+`message` pairs are deduplicated — one field can trip two rules
+  carrying the same copy). Store errors are mapped centrally by `mapStoreError`
+  (`api-utils.ts`): `ConflictError` → 409 slot-taken copy, `NotFoundError` → 404,
+  `BadRequestError` → 400 (each with the Spanish message the store or `generateSlots`
+  carries), anything else → logged + generic 500.
 
 ### Endpoints
 
@@ -345,6 +352,8 @@ Request body (`CreateBusinessInput`):
 **3. `GET /api/availability?business=<slug>&service=<id>&staff=<id|any>&date=<YYYY-MM-DD>`**
 
 - All four params are required. `staff` is a staff id or the literal `"any"`.
+- Two sequential store calls (business + appointments) → total latency up to ~1.2 s;
+  the wizard's per-date skeleton covers the wait (§13).
 - `200` → `TimeSlot[]` sorted by `startMin` (see the algorithm in §10).
   A closed day → `200` with `[]`. A day fully booked → all slots `available: false`.
 - `400` → missing/invalid params (incl. date outside today…today+13:
@@ -387,7 +396,7 @@ createStore(): {
   getBusinessBySlug(slug: string): Promise<Business | null>
   createBusiness(input: CreateBusinessInput): Promise<Business>
   listAppointments(businessId: string): Promise<Appointment[]>
-  createAppointment(input: CreateAppointmentInput): Promise<Appointment>  // throws ConflictError | NotFoundError → handler maps to 409 | 404
+  createAppointment(input: CreateAppointmentInput): Promise<Appointment>  // throws ConflictError | NotFoundError | BadRequestError → mapStoreError → 409 | 404 | 400
 }
 ```
 
@@ -440,7 +449,7 @@ API-generated (non-zod) messages:
 | Staff doesn't provide the service | 400 | `"El integrante no ofrece este servicio."` |
 | Nobody provides the service | 400 | `"Nadie ofrece este servicio por ahora."` |
 | Slot taken at confirm time | 409 | `"Ese horario acaba de ocuparse. Elige otro, por favor."` |
-| Bad request (generic 400) | 400 | `"Revisa los datos e inténtalo de nuevo."` |
+| Bad request (generic 400 — zod issues envelope, or a store domain re-check at POST: closed day, past slot, slot + duration past close) | 400 | `"Revisa los datos e inténtalo de nuevo."` |
 | Unexpected | 500 | `"Algo salió mal. Inténtalo de nuevo en unos momentos."` |
 | Demo flag | 500 | `"Error simulado para demos (?fail=1)."` |
 
@@ -478,15 +487,25 @@ generateSlots(business, service, staffParam, date):
   appointments, **no lead time** (only past times excluded), window = **today…today+13**.
 - Unavailable (staff busy) slots are returned with `available: false` so the UI renders
   them disabled. `staffId` when a specific staff was queried = that staff's id (null if busy).
+- Implementation: `generateSlots(business, service, staffParam, date, appointments, now?)`
+  — pure; the availability route passes store-fetched appointments, `now` defaults to the
+  current clock. `isOverlapping` is exported and shared with the store's conflict check.
+  If a day's open time falls off the 15-min grid, the first candidate rounds **up** to the
+  next grid point (`TimeSlot.startMin` must stay on-grid, §7).
 
 ### Slug, reference, ids
 
 - `slugify`: lowercase, strip accents (NFD), non-alphanumeric → `-`, collapse/trim `-`.
-  Collision → append `-2`, `-3`, … until free.
+  Collision → append `-2`, `-3`, … until free. Empty result (punctuation-only name) →
+  fallback base `negocio`.
 - `reference`: `"PIK-"` + 6 chars sampled from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`
-  (no ambiguous chars), cryptographically random, unique within the store.
-- Ids: `crypto.randomUUID()` everywhere. Server assigns business `id`, `slug`,
-  `createdAt`; keeps client-provided service/staff `id`s.
+  (no ambiguous chars), cryptographically random, unique within the store. The sampler
+  lives in `slug.ts` as `makeReference(used)`; seed appointments mint their references
+  through it first, so seeded and generated codes can never collide.
+- Ids: `crypto.randomUUID()` for everything created at runtime. Server assigns business
+  `id`, `slug`, `createdAt`; keeps client-provided service/staff `id`s. Exception: seed
+  businesses/services/staff use stable readable prefixed ids (`biz-…`, `svc-…`, `staff-…`)
+  so §14 curl commands and the cross-referenced appointment seeds stay deterministic.
 
 ### Cascade
 
@@ -580,6 +599,12 @@ Rules for seeds:
   include at least a couple of same-time different-staff appointments (demonstrates
   that availability is per-staff). **Generate dates relative to store-creation time**
   so the demo never goes stale. Don't fully block any single day.
+- `mocks/appointments.ts` implements this as `seedAppointments(now)`: each business
+  defines one per-open-day pattern (times relative to that day's opening hour, so
+  every open weekday fits), replayed on the open days inside today..+2,
+  design-major interleaved and capped at 8. Boot-time invariant checks **throw**
+  on any invalid seed (unknown ids, staff not providing the service, out-of-hours,
+  double-booking) — a broken seed is a broken demo.
 
 ---
 
@@ -677,16 +702,23 @@ curl -s "localhost:3000/api/availability?business=barberia-don-rafa&service=<svc
 curl -s -X POST localhost:3000/api/appointments -H 'content-type: application/json' \
   -d '{"businessSlug":"barberia-don-rafa","serviceId":"<svcId>","staffId":"any","date":"<today+2>","startMin":600,"customerName":"Ana Prueba","customerPhone":"5512345678"}' -i
 # then repeat the same POST → must return 409
+#   NB: with "staffId":"any" a repeat legitimately books the NEXT free eligible
+#   staff (201 each) until every eligible staff is busy — only then 409. For a
+#   deterministic 409 pin "staffId":"staff-rafa-rafa" and repeat once. Seed ids
+#   are stable, e.g. service svc-rafa-corte-clasico, staff staff-rafa-rafa.
 curl -s "localhost:3000/api/businesses/barberia-don-rafa?fail=1" -i   # must return 500
 ```
 
-Also verify: `400` on a bad POST body; `404` on unknown slug; closed day → `[]`;
-past-time slots absent for today.
+Also verify: `400` on a bad POST body; `404` on unknown slug; closed day → `[]`
+(the closed-day `[]` also wins over availability 400s — §10 order); past-time slots
+absent for today (run before the day's closing time; after it, today is `[]`).
 
 Frontend — manual QA on `pnpm dev` at mobile viewport (390×844) and desktop:
 both flows end-to-end; refresh mid-registration (draft must restore); register with a
 service no staff provides then book it (empty staff state); book the same slot from
-two tabs (second must hit 409 and recover); `?fail=1` on an API call (error panel +
+two tabs **with the same staff member pinned** (second must hit 409 and recover — with
+"Primero disponible" in both tabs, the second confirm books the next free staff
+instead); `?fail=1` on an API call (error panel +
 retry works); unknown slug → 404 page; slot unavailability visible; `?fail=1` docs
 note will live in README.
 
