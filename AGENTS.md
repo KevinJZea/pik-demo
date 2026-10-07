@@ -112,6 +112,7 @@ pnpm install                # install dependencies
 pnpm dev                    # dev server on http://localhost:3000
 pnpm build && pnpm start    # production build + serve
 pnpm lint                   # ESLint 9 (flat config) — there is no `next lint`
+pnpm exec next typegen      # regenerate typed-route types — after adding/changing any route, before tsc
 pnpm exec tsc --noEmit      # typecheck only
 ```
 
@@ -148,6 +149,19 @@ pnpm exec tsc --noEmit      # typecheck only
   (never edit or delete it — it regenerates) and points to the framework docs shipped
   in `node_modules/next/dist/docs/`. Honor it: read the relevant guide there before
   writing Next.js code, since 16.3 may differ from your training data.
+- **React Compiler effects rule:** `reactCompiler: true` enables the compiler's
+  `react-hooks/set-state-in-effect` rule — synchronous `setState` inside effects
+  (including restore-on-mount) is forbidden. Sanctioned patterns in this codebase: a
+  module-level external store + `useSyncExternalStore` for restore-on-mount
+  (registration wizard, §13), and keyed fetch state (`{key, data}` + a nonce; loading
+  derived from a key mismatch) for async lifecycles (booking wizard, §13).
+- **Streaming 404s:** `notFound()` below a `loading.tsx` boundary streams
+  **HTTP 200 with the 404 UI** (affects `/b/[unknown-slug]` and `/register/success`
+  without a valid `?b=`). Verify 404s by rendered copy, never by status code. Root
+  `error.tsx` uses Next 16's `retry()` prop (plain `reset()` is deprecated).
+- **Typed routes in practice:** template-literal hrefs into dynamic routes
+  (`/b/${slug}`) typecheck without `as Route` once `next typegen` has run; `tel:`
+  links are plain `<a>` (outside the route system).
 
 ### Display helpers contract (Frontend, `src/lib/format.ts`)
 
@@ -620,10 +634,16 @@ delete members; each row has service checkboxes) → ⑤ `/register/summary` (gr
 review: Detalles / Ubicación y horario / Servicios / Equipo, each with an "Editar"
 link back to its step) → submit.
 
-- Wizard state: `WizardProvider` in the client `register/layout.tsx` (reducer), persisted
-  to `sessionStorage` key **`pik-registration-draft`** (write-through on every change,
-  restore on mount, **clear after successful POST**, then
-  `router.push('/register/success?b=<slug>')`).
+- Wizard state: a pure reducer + step-completion predicates + `sessionStorage` IO in
+  `src/components/register/wizard-state.ts`, driven by a **module-level external
+  store** in `wizard-provider.tsx` consumed via `useSyncExternalStore` (the React
+  Compiler rule forbids restore-setState-in-effect, §5): a stable blank SSR snapshot;
+  `sessionStorage` restore in a post-mount microtask; write-through on every dispatch
+  once hydrated; the module singleton survives client-side layout remounts.
+  `WizardProvider` in the client `register/layout.tsx` distributes
+  `{draft, dispatch, hydrated}` (+ Stepper). Persisted to `sessionStorage` key
+  **`pik-registration-draft`**; **cleared after successful POST**, then
+  `router.push('/register/success?b=<slug>')`.
 - Draft shape mirrors `CreateBusinessInput` with optional step-1/2 fields and required
   `services`/`staff` arrays (ids via `crypto.randomUUID()`).
 - **Step guards:** each step page redirects to the **first incomplete step** when its
@@ -632,6 +652,15 @@ link back to its step) → submit.
 - Copy hint on step 4: "Agrégate a ti mismo/a si trabajas solo/a."
 - Inline validation uses the shared zod schemas; validate on blur/change **after the
   first submit attempt** on each step (no nagging while typing first time).
+- Inputs are constraint-safe where the UI allows it: hours and durations are selects
+  on the 15-min grid (06:00–23:45 / 15–240 min), so the "HH:mm format" and "multiple
+  of 15" messages can only arrive from the server; prices are typed in pesos and
+  converted to cents. Service/staff rows edit in a form card and commit via a
+  schema-validated "Guardar" — the draft never holds an invalid row; plain text
+  fields write through live. The step-minimum messages ("Agrega al menos un
+  servicio/integrante…") and "Elige una categoría." are UI literals copied verbatim
+  from §9 (cross-array/null gates, not single-schema field issues); all other copy
+  derives from schema issues or schemas' exported `ERROR_*` constants.
 - Submit: loading state (disabled + Spinner) → on 201 clear draft + navigate to
   `/register/success` (RSC: reads the store via `?b=`; `notFound()` when missing) →
   shows confirmation + link to the new business's public profile `/b/[slug]`.
@@ -644,6 +673,8 @@ Cover (category gradient + glyph), name (display font), category badge, address 
 phone, weekly-hours summary, staff preview (name + role), and service cards
 (name, duration, price, "Reservar" → `/b/[slug]/book?service=<id>`).
 **Zero client JS on this page — links only.** `notFound()` on unknown slug.
+Deliberately **no `generateMetadata`** here — it would double the store latency for a
+tab-title polish; don't add it.
 
 ### Booking wizard — `/b/[slug]/book` (client, Suspense-wrapped for `useSearchParams`)
 
@@ -662,11 +693,20 @@ Selections live in URL search params: `service`, `staff` (id | `any`), `date`
   server-side to the first free staff (§10).
 - Confirm: button → fake payment spinner **~1.2 s** → `POST /api/appointments` →
   on `201` show the success screen (reference code, full recap, "Hecho" → back to
-  profile). On **409** show the conflict message and send the user back to step 3 with
-  the same date preselected (fresh slots). On 400/500 → `ErrorPanel` with retry.
+  profile). On **409** auto-return to step 3: the exact conflict copy as a banner
+  there, same date preselected, forced slots refetch (nonce) so the taken slot
+  clears, `replace()` so the dead step-4 URL leaves history. On **400** (stale
+  domain state: closed day, past slot, past close) show the message + "Ver horarios
+  disponibles" back to step 3 with a forced refetch — **no retry re-POST** (the same
+  params would fail again). On **500** `ErrorPanel` whose retry re-POSTs the kept
+  payload (`lastInput`).
 - The success screen is ephemeral client state — refreshing returns to step 4
   (known limitation, §15). Customer name/phone are local state only (accepted loss).
 - Completed steps are clickable in the `Stepper` to go back.
+- Selection semantics: re-picking the currently selected service/staff keeps
+  downstream selections; picking a different one clears them (a staff change resets
+  date+time — availability is per-staff). Stepper back into step 3 keeps the date,
+  drops the time, and forces a slots refetch.
 
 ### States matrix (every cell is required)
 

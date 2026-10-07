@@ -121,8 +121,8 @@ export default async function BusinessProfilePage(
                     {formatPrice(service.priceCents)}
                   </p>
                 </div>
-                {/* Booking route lands in step F9; cast per the typed-routes
-                    guide (non-literal href to a dynamic route). */}
+                {/* Template-literal href to a dynamic route: typechecks
+                    as-is once `next typegen` has run — no cast needed. */}
                 <Link
                   href={`/b/${business.slug}/book?service=${service.id}`}
                   className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-plum px-4 text-sm font-medium text-white transition-colors hover:bg-plum-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-plum focus-visible:ring-offset-2"

@@ -273,6 +273,23 @@ export function BookingWizard({ slug }: BookingWizardProps): ReactNode {
         });
         setConfirmed(appointment);
       } catch (error) {
+        // 409 recovery (§13): straight back to step 3 with the same date,
+        // the exact conflict copy as a banner there, and a forced refetch
+        // (nonce) so the just-taken slot clears. replace() drops the dead
+        // step-4 URL from history; step-4 field state resets so a later
+        // re-entry doesn't show stale customer-field errors.
+        if (error instanceof PikApiError && error.status === 409) {
+          setConfirmError(null);
+          setConflictMessage(error.message);
+          setAttemptedSubmit(false);
+          setFieldErrors({});
+          setSlotsNonce((n) => n + 1);
+          navigate(
+            { service: serviceParam, staff: staffParam, date: dateParam },
+            'replace',
+          );
+          return;
+        }
         setConfirmError({
           status: error instanceof PikApiError ? error.status : 0,
           message:
@@ -284,7 +301,7 @@ export function BookingWizard({ slug }: BookingWizardProps): ReactNode {
         setSubmitting(false);
       }
     },
-    [slug, serviceParam, staffParam, dateParam, startMinParam],
+    [slug, serviceParam, staffParam, dateParam, startMinParam, navigate],
   );
 
   const retryConfirm = useCallback(() => {
@@ -349,6 +366,9 @@ export function BookingWizard({ slug }: BookingWizardProps): ReactNode {
     if (index <= 0) navigate({});
     else if (index === 1) navigate({ service: serviceParam });
     else {
+      // Into the slot grid: force a refetch (nonce) so a slot taken while the
+      // user sat at step 4 doesn't still show as available.
+      setSlotsNonce((n) => n + 1);
       navigate({
         service: serviceParam,
         staff: staffParam,
@@ -544,9 +564,17 @@ export function BookingWizard({ slug }: BookingWizardProps): ReactNode {
             </h2>
             {confirmError !== null && (
               <div className="mt-4 flex flex-col gap-2.5">
+                {/* 400 = stale domain state (closed day, past slot…):
+                    re-POSTing the same params would fail the same way, so
+                    only the step-3 link below recovers (§13). Other statuses
+                    retry the kept payload. */}
                 <ErrorPanel
                   message={confirmError.message}
-                  onRetry={lastInput === null ? undefined : retryConfirm}
+                  onRetry={
+                    confirmError.status === 400 || lastInput === null
+                      ? undefined
+                      : retryConfirm
+                  }
                 />
                 {confirmError.status === 400 && (
                   <button
