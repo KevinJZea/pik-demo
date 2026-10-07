@@ -1,52 +1,24 @@
+import type { Appointment, Business, TimeSlot } from '@/types/domain';
+
 import type {
-  Appointment,
-  Business,
-  BusinessCategory,
-  Service,
-  Staff,
-  TimeSlot,
-  WeeklyHours,
-} from '@/types/domain';
+  ApiIssue,
+  AvailabilityQuery,
+  CreateAppointmentInput,
+  CreateBusinessInput,
+} from '@/lib/schemas';
 
 /**
- * Request-body contracts for the two POST endpoints (AGENTS.md §8). Defined
- * here instead of inferred from Backend's zod schemas so this client module
- * doesn't block on Backend files landing; the shapes are contract-fixed, and
- * structural typing keeps them interoperable with the schemas' inferred types.
+ * Request/response payload contracts are single-sourced from the Backend-owned
+ * shared schemas (§3: the frontend imports them read-only). The zod-inferred
+ * `staffId`/`staff` fields are plain `string`, which already accepts both real
+ * ids and the literal "any" — no precision is lost (§10).
  */
-export type CreateBusinessInput = {
-  name: string;
-  category: BusinessCategory;
-  phone: string;
-  address: string;
-  city: string;
-  hours: WeeklyHours;
-  services: Service[];
-  staff: Staff[];
-};
-
-export type CreateAppointmentInput = {
-  businessSlug: string;
-  serviceId: string;
-  /** Staff id or the literal "any" — the server resolves "any" (§10). */
-  staffId: string | 'any';
-  date: string;
-  startMin: number;
-  customerName: string;
-  customerPhone: string;
-};
-
-/** Query params for GET /api/availability (§8) — all four required. */
-export type AvailabilityParams = {
-  business: string;
-  service: string;
-  /** Staff id or the literal "any". */
-  staff: string;
-  date: string;
-};
-
-/** Field issue from the validation envelope (§8) — zod issues, flattened. */
-export type ApiIssue = { path: string; message: string };
+export type {
+  ApiIssue,
+  AvailabilityQuery,
+  CreateAppointmentInput,
+  CreateBusinessInput,
+} from '@/lib/schemas';
 
 /**
  * Fallback when a response carries no usable JSON envelope (e.g. a proxy error
@@ -78,7 +50,7 @@ type ErrorEnvelope = { error?: unknown; issues?: unknown };
 export type FailOption = { fail?: boolean };
 
 /** Pure builder for the availability URL — one source of param serialization. */
-export function buildAvailabilityUrl(params: AvailabilityParams): string {
+export function buildAvailabilityUrl(params: AvailabilityQuery): string {
   const search = new URLSearchParams({
     business: params.business,
     service: params.service,
@@ -156,7 +128,7 @@ export async function createBusiness(
 
 /** GET /api/availability — slots for one service/staff/date (sorted, §10). */
 export async function getAvailability(
-  params: AvailabilityParams,
+  params: AvailabilityQuery,
   opts: FailOption = {},
 ): Promise<TimeSlot[]> {
   return request<TimeSlot[]>(
