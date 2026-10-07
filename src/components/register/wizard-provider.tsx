@@ -136,17 +136,21 @@ export function useWizard(): WizardContextValue {
 /**
  * Step-guard hook (§13): returns true once prerequisites for `step` hold and
  * the page may render; otherwise redirects to the first incomplete step.
- * Callsites must keep their hooks above the `if (!ready) return <skeleton>`
- * early return.
+ * `disabled` suspends the redirect effect only — the summary page passes its
+ * `submitting` flag so an intentional leave (success → /register/success)
+ * can't be hijacked: the reset it dispatches empties the draft, which would
+ * otherwise read as "prerequisites gone" and race the success navigation
+ * back to /register. Callsites must keep their hooks above the
+ * `if (!ready) return <skeleton>` early return.
  */
-export function useStepGuard(step: number): boolean {
+export function useStepGuard(step: number, disabled = false): boolean {
   const { draft, hydrated } = useWizard();
   const router = useRouter();
   const target = guardTargetForStep(draft, step);
   // router.replace is an update of an external system (the URL), not a
   // setState call — the effect form is the sanctioned redirect pattern.
   useEffect(() => {
-    if (hydrated && target !== null) router.replace(target);
-  }, [hydrated, target, router]);
+    if (!disabled && hydrated && target !== null) router.replace(target);
+  }, [disabled, hydrated, target, router]);
   return hydrated && target === null;
 }

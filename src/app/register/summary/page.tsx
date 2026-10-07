@@ -23,12 +23,17 @@ import { PikApiError, createBusiness } from '@/lib/api';
 export default function RegisterSummaryPage(): ReactNode {
   const { draft, dispatch } = useWizard();
   const router = useRouter();
-  // Redirects to the first incomplete step among 1–4 when missing.
-  const ready = useStepGuard(4);
+  // Declared before the guard (hook order doesn't matter, readability does):
+  // while the POST is in flight, the guard must not act — see useStepGuard.
+  const [submitting, setSubmitting] = useState(false);
+  // Redirects to the first incomplete step among 1–4 when missing. Suspended
+  // while submitting: on success the page dispatches 'reset' to clear the
+  // draft, which would momentarily read as "step 1 incomplete" and race the
+  // push to /register/success with a redirect back to /register.
+  const ready = useStepGuard(4, submitting);
   const [issues, setIssues] = useState<ApiIssue[] | null>(null);
   // Server-level failure message (500/network); retry re-runs the submit.
   const [serverError, setServerError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
   // Failure focus target: keyboard and screen-reader users get moved to the
   // banner instead of hunting for it (steps move focus to h1 on navigation).
   const issuesRef = useRef<HTMLDivElement | null>(null);
