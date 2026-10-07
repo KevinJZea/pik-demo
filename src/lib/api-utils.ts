@@ -24,17 +24,45 @@ import {
 // of the §8 error envelope, so it must have exactly one definition.
 export type { ApiIssue } from './schemas';
 
-// Store-thrown errors; the handler maps each class to its HTTP status and
+// Store-thrown errors; the handler maps each error to its HTTP status and
 // uses the carried Spanish message as-is (§9).
-export class ConflictError extends Error {}
+//
+// Each instance carries its status as DATA (`pikStatus`): Turbopack dev
+// evaluates this module once per route bundle, while the store is pinned on
+// globalThis by whichever bundle compiled first — so the store can throw a
+// class copy that a handler bundle's `instanceof` doesn't recognize (dev
+// 500s on every store error; prod shares module instances and is unaffected).
+// mapStoreError therefore matches structurally, never by identity.
+export class ConflictError extends Error {
+  readonly pikStatus = 409 as const;
 
-export class NotFoundError extends Error {}
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConflictError';
+  }
+}
+
+export class NotFoundError extends Error {
+  readonly pikStatus = 404 as const;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'NotFoundError';
+  }
+}
 
 // Domain rules that fail as a 400 with their own final copy — e.g. a staff
 // member who doesn't provide the requested service (§9 "El integrante no
 // ofrece este servicio."). Distinct from zod issues: the message is complete,
 // not a per-field issue.
-export class BadRequestError extends Error {}
+export class BadRequestError extends Error {
+  readonly pikStatus = 400 as const;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'BadRequestError';
+  }
+}
 
 export function simulateLatency(minMs: number, maxMs: number): Promise<void> {
   const ms = Math.floor(Math.random() * (maxMs - minMs + 1) + minMs);
@@ -75,14 +103,35 @@ export function jsonIssueResponse(error: z.ZodError): Response {
   );
 }
 
+// Structural (identity-free) view of a store-thrown error — the only safe
+// shape across duplicated module copies (see the class docs above).
+type StoreError = { pikStatus: 400 | 404 | 409; message: string };
+
+function asStoreError(error: unknown): StoreError | null {
+  if (typeof error !== 'object' || error === null) return null;
+  const { pikStatus, message } = error as {
+    pikStatus?: unknown;
+    message?: unknown;
+  };
+  if (
+    (pikStatus === 400 || pikStatus === 404 || pikStatus === 409) &&
+    typeof message === 'string'
+  ) {
+    return { pikStatus, message };
+  }
+  return null;
+}
+
 // Single place where store-thrown errors become the §8/§9 HTTP envelope. The
-// classes carry their Spanish copy, so mapping is 1:1; unknown throwables are
-// logged (for debugging) and answered with the generic 500 copy instead of
-// leaking internals.
+// classes carry their Spanish copy; 409's copy is pinned to the §9 literal so
+// it can never drift. Unknown throwables are logged (for debugging) and
+// answered with the generic 500 copy instead of leaking internals.
 export function mapStoreError(error: unknown): Response {
-  if (error instanceof ConflictError) return jsonError(409, ERROR_SLOT_TAKEN);
-  if (error instanceof NotFoundError) return jsonError(404, error.message);
-  if (error instanceof BadRequestError) return jsonError(400, error.message);
-  console.error(error);
-  return jsonError(500, ERROR_UNEXPECTED);
+  const mapped = asStoreError(error);
+  if (mapped === null) {
+    console.error(error);
+    return jsonError(500, ERROR_UNEXPECTED);
+  }
+  if (mapped.pikStatus === 409) return jsonError(409, ERROR_SLOT_TAKEN);
+  return jsonError(mapped.pikStatus, mapped.message);
 }
