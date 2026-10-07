@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { connection } from 'next/server';
 import type { ReactNode } from 'react';
 
 import { BusinessCard } from '@/components/home';
@@ -11,6 +12,11 @@ import { EmptyState } from '@/components/ui';
  * directly (§8) — zero client JS.
  */
 export default async function HomePage(): Promise<ReactNode> {
+  // The store mutates at runtime (new registrations via POST /api/businesses),
+  // and without request-time APIs Next would statically prerender this page at
+  // build time — freezing the directory with the 4 seeds forever. connection()
+  // opts into per-request rendering (16.x API for mutable non-request-API data).
+  await connection();
   const businesses = await store.getBusinesses();
 
   return (
