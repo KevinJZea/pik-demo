@@ -105,7 +105,7 @@ export function formatDate(dateStr: string): string {
 
 function formatHoursRange(day: DayHours): string {
   if (day === null) return 'Cerrado';
-  return `${formatTimeString(day.open)} - ${formatTimeString(day.close)}`;
+  return `${formatTimeString(day.open)} – ${formatTimeString(day.close)}`;
 }
 
 export function formatDayHours(day: DayHours): string {
