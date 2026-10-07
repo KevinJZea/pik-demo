@@ -20,7 +20,10 @@ export function slugify(value: string): string {
 }
 
 /** Collision suffix per §10: append `-2`, `-3`, … until the slug is free. */
-export function uniqueSlug(base: string, takenSlugs: ReadonlySet<string>): string {
+export function uniqueSlug(
+  base: string,
+  takenSlugs: ReadonlySet<string>,
+): string {
   if (!takenSlugs.has(base)) return base;
   let suffix = 2;
   while (takenSlugs.has(`${base}-${suffix}`)) suffix += 1;
@@ -36,7 +39,10 @@ export function makeReference(used: Set<string>): string {
   let reference = '';
   do {
     const bytes = crypto.getRandomValues(new Uint8Array(6));
-    const chars = Array.from(bytes, (byte) => REFERENCE_ALPHABET[byte % REFERENCE_ALPHABET.length]);
+    const chars = Array.from(
+      bytes,
+      (byte) => REFERENCE_ALPHABET[byte % REFERENCE_ALPHABET.length],
+    );
     reference = `PIK-${chars.join('')}`;
   } while (used.has(reference));
   used.add(reference);

@@ -16,6 +16,7 @@ import {
 } from '@/lib/schemas';
 
 import { BadRequestError, ConflictError, NotFoundError, simulateLatency } from '@/lib/api-utils';
+import { isOverlapping } from '@/lib/availability';
 import { makeReference, slugify, uniqueSlug } from '@/lib/slug';
 import { seedBusinesses } from '@/mocks/businesses';
 import { seedAppointments } from '@/mocks/appointments';
@@ -32,15 +33,6 @@ export type Store = {
   listAppointments(businessId: string): Promise<Appointment[]>;
   createAppointment(input: CreateAppointmentInput): Promise<Appointment>;
 };
-
-// §10 overlap test on half-open intervals [start, end): a.start < end &&
-// start < a.end. Used for conflict checks here; availability.ts (B6) must
-// mirror it exactly for slot generation.
-function isOverlapping(startMin: number, endMin: number, appointment: Appointment): boolean {
-  return (
-    appointment.startMin < endMin && startMin < appointment.startMin + appointment.durationMin
-  );
-}
 
 function createStore(): Store {
   const businesses = new Map<string, Business>();
