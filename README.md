@@ -35,7 +35,7 @@ pnpm exec tsc --noEmit   # typecheck only
 - **Seeded businesses:** four businesses (one per category), each with services, staff,
   weekly hours, and pre-seeded appointments generated **relative to today**, so
   unavailable slots always look real.
-- **Simulated latency:** every read through the in-memory store sleeps 300–600 ms on
+- **Simulated latency:** every call through the in-memory store sleeps 300–600 ms on
   purpose, so loading skeletons and spinners are actually observable.
 - **`?fail=1` demo flag:** append `?fail=1` to any API route
   (e.g. `/api/businesses/barberia-don-rafa?fail=1`) to get a deterministic
@@ -46,9 +46,10 @@ pnpm exec tsc --noEmit   # typecheck only
   404 minutes later on a cold instance. Seeded businesses exist everywhere.
   `pnpm dev` is a single instance, so the full loop (register → book your own
   business) works reliably there.
-- Booking the same slot from two tabs: the second confirm gets a `409`
-  ("Ese horario acaba de ocuparse") and the wizard sends you back to the time step
-  with fresh slots.
+- Booking the same slot from two tabs (same staff member): the second confirm gets a
+  `409` ("Ese horario acaba de ocuparse") and the wizard sends you back to the time
+  step with fresh slots. With "Primero disponible" selected in both tabs, the second
+  confirm instead books the next free staff member (201) until they're all busy.
 
 ---
 
