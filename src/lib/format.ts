@@ -15,7 +15,9 @@ const TIME = new Intl.DateTimeFormat('es-MX', {
 // formatting "HH:mm" values in the same local calendar day.
 const DAY_TEMPLATE = new Date(2000, 0, 1);
 
-const WEEKDAY_SHORT = [
+// es-MX short names, indexed by Weekday (0 = Sunday). Exported for compact
+// date displays like the booking date strip.
+export const WEEKDAY_SHORT = [
   'dom',
   'lun',
   'mar',
@@ -25,7 +27,8 @@ const WEEKDAY_SHORT = [
   'sáb',
 ] as const;
 
-const MONTH_SHORT = [
+// es-MX short month names, indexed 0–11.
+export const MONTH_SHORT = [
   'ene',
   'feb',
   'mar',
