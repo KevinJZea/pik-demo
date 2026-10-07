@@ -3,7 +3,13 @@ import 'server-only';
 import { z } from 'zod';
 
 import type { ApiIssue } from './schemas';
-import { ERROR_BAD_REQUEST, zodIssues } from './schemas';
+import {
+  ERROR_BAD_REQUEST,
+  ERROR_DEMO_FAILED,
+  ERROR_SLOT_TAKEN,
+  ERROR_UNEXPECTED,
+  zodIssues,
+} from './schemas';
 
 /**
  * Simulated-latency and demo-failure contract (AGENTS.md §8). The store is the
@@ -42,6 +48,16 @@ export function shouldFail(request: Request): boolean {
   return new URL(request.url).searchParams.get('fail') === '1';
 }
 
+// Composed convenience for handlers: null when the demo flag is absent, else
+// the §8 error response (await ~500 ms → 500). Await it first thing.
+export async function failIfRequested(
+  request: Request,
+): Promise<Response | null> {
+  if (!shouldFail(request)) return null;
+  await simulateLatency(450, 550);
+  return jsonError(500, ERROR_DEMO_FAILED);
+}
+
 export function jsonError(
   status: 400 | 404 | 409 | 500,
   error: string,
@@ -57,4 +73,16 @@ export function jsonIssueResponse(error: z.ZodError): Response {
     { error: ERROR_BAD_REQUEST, issues: zodIssues(error) },
     { status: 400 },
   );
+}
+
+// Single place where store-thrown errors become the §8/§9 HTTP envelope. The
+// classes carry their Spanish copy, so mapping is 1:1; unknown throwables are
+// logged (for debugging) and answered with the generic 500 copy instead of
+// leaking internals.
+export function mapStoreError(error: unknown): Response {
+  if (error instanceof ConflictError) return jsonError(409, ERROR_SLOT_TAKEN);
+  if (error instanceof NotFoundError) return jsonError(404, error.message);
+  if (error instanceof BadRequestError) return jsonError(400, error.message);
+  console.error(error);
+  return jsonError(500, ERROR_UNEXPECTED);
 }
